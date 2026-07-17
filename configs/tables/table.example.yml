@@ -7,15 +7,28 @@ table: m_role
 mapping:
   Role Name:
     column: name
+  Active:
+    column: is_active
+    transform: string_to_bool   # Y/N, 1/0, yes/no → true/false
 
 defaults:
   id: uuid
-  active: true
   created_at: now
   updated_at: now
   created_by: system
 
+# Opsional: transform value yang didukung
+# string_to_bool   : Y/N, yes/no, 1/0, true/false, active/inactive, deployed/undeployed → boolean
+# lower            : "Nama" → "nama"
+# upper            : "nama" → "NAMA"
+# trim             : "  nama  " → "nama"
+
+# Opsional: filter baris yang akan di-insert
+# filter:
+#   column: is_active
+#   value: true
+
 # Opsional: atur perilaku saat ada duplicate key
 # on_conflict:
-#   action: identify   # update hanya jika ada perubahan nilai
-#   keys: [name]       # kolom constraint (harus unique index di DB)
+#   action: ignore    # skip duplikat (tanpa perlu unique index)
+#   keys: [name]

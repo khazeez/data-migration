@@ -41,12 +41,18 @@ type ConflictConfig struct {
 	Keys   []string `yaml:"keys"`
 }
 
+type FilterConfig struct {
+	Column string      `yaml:"column"`
+	Value  interface{} `yaml:"value"`
+}
+
 type TableConfig struct {
 	Sheet      SheetConfig            `yaml:"sheet"`
 	Table      string                 `yaml:"table"`
 	Mapping    map[string]ColumnMap   `yaml:"mapping"`
 	Defaults   map[string]interface{} `yaml:"defaults"`
 	OnConflict *ConflictConfig        `yaml:"on_conflict,omitempty"`
+	Filter     *FilterConfig          `yaml:"filter,omitempty"`
 }
 
 type SheetConfig struct {
@@ -55,8 +61,9 @@ type SheetConfig struct {
 }
 
 type ColumnMap struct {
-	Column   string `yaml:"column"`
-	Required bool   `yaml:"required,omitempty"`
+	Column    string `yaml:"column"`
+	Required  bool   `yaml:"required,omitempty"`
+	Transform string `yaml:"transform,omitempty"`
 }
 
 type JobConfig struct {

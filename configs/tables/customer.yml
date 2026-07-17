@@ -11,10 +11,17 @@ mapping:
     column: age
   script:
     column: script
+  status:
+    column: active
+    transform: string_to_bool
 
 defaults:
   id: uuid
   timestamp: now
+
+filter:
+  column: status
+  value: inactive
 
 on_conflict:
   action: ignore

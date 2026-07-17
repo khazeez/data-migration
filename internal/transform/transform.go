@@ -42,6 +42,10 @@ func (t *Transformer) TransformRow(headerIdx map[string]int, row []interface{}) 
 			}
 		}
 
+		if colMap.Transform != "" && val != nil {
+			val = applyTransform(val, colMap.Transform)
+		}
+
 		result.Values[colMap.Column] = val
 	}
 
@@ -91,6 +95,29 @@ func (t *Transformer) BuildColumnsAndRows(headerIdx map[string]int, sheetRows []
 	}
 
 	return columns, rows, nil
+}
+
+func applyTransform(val interface{}, transform string) interface{} {
+	s := strings.TrimSpace(fmt.Sprintf("%v", val))
+	switch transform {
+	case "string_to_bool":
+		switch strings.ToLower(s) {
+		case "y", "yes", "1", "true", "t", "active", "deployed":
+			return true
+		case "n", "no", "0", "false", "f", "inactive", "undeployed":
+			return false
+		default:
+			return val
+		}
+	case "lower":
+		return strings.ToLower(s)
+	case "upper":
+		return strings.ToUpper(s)
+	case "trim":
+		return strings.TrimSpace(s)
+	default:
+		return val
+	}
 }
 
 func resolveDefault(def interface{}) interface{} {

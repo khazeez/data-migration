@@ -79,10 +79,22 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	headerIdx := mapper.BuildHeaderIndex(sheetData.Headers)
 	t := transform.New(imp.tableCfg)
 
+	if imp.tableCfg.Filter != nil {
+		before := len(sheetData.Rows)
+		sheetData.Rows = filterRows(sheetData.Headers, sheetData.Rows, imp.tableCfg.Filter)
+		if len(sheetData.Rows) < before {
+			imp.log.Info("Filtered out %d rows (not matching %s = %v)", before-len(sheetData.Rows), imp.tableCfg.Filter.Column, imp.tableCfg.Filter.Value)
+		}
+	}
+
 	imp.log.Info("Transforming %d rows...", len(sheetData.Rows))
 	columns, rows, err := t.BuildColumnsAndRows(headerIdx, sheetData.Rows)
 	if err != nil {
 		return nil, fmt.Errorf("transform data: %w", err)
+	}
+
+	if imp.tableCfg.Filter != nil {
+		imp.log.Info("Filter: %s = %v", imp.tableCfg.Filter.Column, imp.tableCfg.Filter.Value)
 	}
 
 	if imp.tableCfg.OnConflict != nil {
@@ -147,6 +159,27 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	imp.log.Info("Successfully inserted %d rows into %s (%v)", result.Inserted, imp.tableCfg.Table, result.Duration)
 
 	return result, nil
+}
+
+func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) [][]interface{} {
+	idx := -1
+	for i, col := range columns {
+		if col == f.Column {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return rows
+	}
+
+	var filtered [][]interface{}
+	for _, row := range rows {
+		if idx < len(row) && fmt.Sprintf("%v", row[idx]) == fmt.Sprintf("%v", f.Value) {
+			filtered = append(filtered, row)
+		}
+	}
+	return filtered
 }
 
 func (imp *Importer) filterExisting(ctx context.Context, tx db.Transaction, columns []string, rows [][]interface{}) ([][]interface{}, error) {
