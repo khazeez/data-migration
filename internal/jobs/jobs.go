@@ -1,0 +1,128 @@
+package jobs
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"data-migration/internal/config"
+	"data-migration/internal/db"
+	"data-migration/internal/importer"
+	"data-migration/internal/logger"
+	"data-migration/internal/sheets"
+)
+
+type Runner struct {
+	appCfg    *config.AppConfig
+	jobsDir   string
+	tablesDir string
+	sheetsCli *sheets.Client
+	database  *db.DB
+	log       *logger.Logger
+	dryRun    bool
+	batchSize int
+}
+
+func NewRunner(appCfg *config.AppConfig, jobsDir, tablesDir string, log *logger.Logger) *Runner {
+	return &Runner{
+		appCfg:    appCfg,
+		jobsDir:   jobsDir,
+		tablesDir: tablesDir,
+		log:       log,
+		batchSize: 500,
+	}
+}
+
+func (r *Runner) SetDryRun(v bool) {
+	r.dryRun = v
+}
+
+func (r *Runner) SetBatchSize(n int) {
+	if n > 0 {
+		r.batchSize = n
+	}
+}
+
+func (r *Runner) InitSheets(ctx context.Context) error {
+	cli, err := sheets.NewClient(ctx, r.appCfg.Google.Credential)
+	if err != nil {
+		return fmt.Errorf("init sheets client: %w", err)
+	}
+	r.sheetsCli = cli
+	return nil
+}
+
+func (r *Runner) InitDB(ctx context.Context) error {
+	d, err := db.Connect(r.appCfg.DSN())
+	if err != nil {
+		return fmt.Errorf("init database: %w", err)
+	}
+	r.database = d
+	return nil
+}
+
+func (r *Runner) Close() {
+	if r.database != nil {
+		r.database.Close()
+	}
+}
+
+func (r *Runner) RunJob(ctx context.Context, jobName string) error {
+	jobPath := filepath.Join(r.jobsDir, jobName+".yml")
+	jobCfg, err := config.LoadJob(jobPath)
+	if err != nil {
+		return fmt.Errorf("load job %s: %w", jobName, err)
+	}
+
+	r.log.Info("Starting job: %s (tables: %d)", jobName, len(jobCfg.Tables))
+
+	totalStart := time.Now()
+	var totalRows int
+
+	tablePaths := config.ResolveTablePaths(r.tablesDir, jobCfg.Tables)
+
+	for _, tp := range tablePaths {
+		tableCfg, err := config.LoadTable(tp)
+		if err != nil {
+			return fmt.Errorf("load table config %s: %w", tp, err)
+		}
+
+		r.log.Info("Processing table: %s (sheet: %s)", tableCfg.Table, tableCfg.Sheet.Worksheet)
+
+		imp := importer.New(r.sheetsCli, r.database, tableCfg, r.log)
+		imp.SetDryRun(r.dryRun)
+		imp.SetBatchSize(r.batchSize)
+
+		result, err := imp.Run(ctx)
+		if err != nil {
+			r.log.Error("Table %s failed: %v", tableCfg.Table, err)
+			return fmt.Errorf("import %s: %w", tableCfg.Table, err)
+		}
+
+		totalRows += result.Inserted
+
+		r.log.Info("Table %s done: %d rows inserted, %d errors, %v elapsed",
+			tableCfg.Table, result.Inserted, result.Errors, result.Duration)
+	}
+
+	totalDur := time.Since(totalStart)
+	r.log.Info("Job %s completed: %d rows total, %v elapsed", jobName, totalRows, totalDur)
+
+	return nil
+}
+
+func (r *Runner) ListJobs() ([]string, error) {
+	entries, err := os.ReadDir(r.jobsDir)
+	if err != nil {
+		return nil, fmt.Errorf("read jobs dir: %w", err)
+	}
+	var jobs []string
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".yml" {
+			jobs = append(jobs, e.Name()[:len(e.Name())-4])
+		}
+	}
+	return jobs, nil
+}

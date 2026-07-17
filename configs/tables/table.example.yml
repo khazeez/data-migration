@@ -1,0 +1,16 @@
+sheet:
+  spreadsheet_id: 1xxxxxxxx
+  worksheet: Role
+
+table: m_role
+
+mapping:
+  Role Name:
+    column: name
+
+defaults:
+  id: uuid
+  active: true
+  created_at: now
+  updated_at: now
+  created_by: system

@@ -1,0 +1,26 @@
+sheet:
+  spreadsheet_id: YOUR_SPREADSHEET_ID
+  worksheet: Vendor
+
+table: m_vendor
+
+mapping:
+  Vendor Code:
+    column: code
+    required: true
+  Vendor Name:
+    column: name
+    required: true
+  Vendor Email:
+    column: email
+  Phone:
+    column: phone
+  Address:
+    column: address
+
+defaults:
+  id: uuid
+  active: true
+  created_at: now
+  updated_at: now
+  created_by: system

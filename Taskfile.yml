@@ -1,0 +1,60 @@
+version: "3"
+
+vars:
+  BINARY: sheet-loader
+  CONFIG: configs/app.yml
+  JOB: master-data
+
+tasks:
+  default:
+    deps: [build]
+
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -o "{{.BINARY}}" ./cmd/
+    sources:
+      - ./cmd/**/*.go
+      - ./internal/**/*.go
+    generates:
+      - "{{.BINARY}}"
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - go clean
+      - rm -f "{{.BINARY}}"
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -v ./internal/...
+
+  run:
+    desc: "Run job (default: master-data). Use -- job=<name> to change"
+    deps: [build]
+    cmds:
+      - ./"{{.BINARY}}" -job "{{.JOB}}" -config "{{.CONFIG}}" {{.CLI_ARGS}}
+
+  dry-run:
+    desc: Run job in dry-run mode
+    deps: [build]
+    cmds:
+      - ./"{{.BINARY}}" -job "{{.JOB}}" -config "{{.CONFIG}}" -dry-run {{.CLI_ARGS}}
+
+  list:
+    desc: List available jobs
+    deps: [build]
+    cmds:
+      - ./"{{.BINARY}}" -list -config "{{.CONFIG}}"
+
+  fmt:
+    desc: Format Go source code
+    cmds:
+      - go fmt ./...
+
+  deps:
+    desc: Tidy Go module dependencies
+    aliases: [tidy]
+    cmds:
+      - go mod tidy
