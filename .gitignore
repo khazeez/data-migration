@@ -1,0 +1,10 @@
+# build
+sheet-loader.exe
+sheet-loader
+
+# secrets
+credentials.json
+.env
+
+# cache
+.task/

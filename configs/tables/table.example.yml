@@ -14,3 +14,8 @@ defaults:
   created_at: now
   updated_at: now
   created_by: system
+
+# Opsional: atur perilaku saat ada duplicate key
+# on_conflict:
+#   action: identify   # update hanya jika ada perubahan nilai
+#   keys: [name]       # kolom constraint (harus unique index di DB)

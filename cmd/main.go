@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
+	"fmt"	
 	"os"
 	"path/filepath"
 
@@ -22,7 +22,7 @@ func main() {
 		logLevel   string
 	)
 
-	flag.StringVar(&appCfgPath, "config", "configs/app.yml", "Path to app config file")
+	flag.StringVar(&appCfgPath, "config", "", "Path to app config file (optional)")
 	flag.StringVar(&jobName, "job", "", "Job name to execute")
 	flag.BoolVar(&listJobs, "list", false, "List available jobs")
 	flag.BoolVar(&dryRun, "dry-run", false, "Dry run mode (no DB changes)")
@@ -39,9 +39,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	baseDir := filepath.Dir(appCfgPath)
-	jobsDir := filepath.Join(baseDir, "jobs")
-	tablesDir := filepath.Join(baseDir, "tables")
+	var jobsDir, tablesDir string
+	if appCfgPath != "" {
+		base := filepath.Dir(appCfgPath)
+		jobsDir = envOrDefault("JOBS_DIR", filepath.Join(base, "jobs"))
+		tablesDir = envOrDefault("TABLES_DIR", filepath.Join(base, "tables"))
+	} else {
+		jobsDir = envOrDefault("JOBS_DIR", "configs/jobs")
+		tablesDir = envOrDefault("TABLES_DIR", "configs/tables")
+	}
 
 	runner := jobs.NewRunner(appCfg, jobsDir, tablesDir, log)
 	runner.SetDryRun(dryRun)
@@ -85,6 +91,13 @@ func main() {
 		log.Error("Job failed: %v", err)
 		os.Exit(1)
 	}
+}
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func parseLogLevel(s string) logger.Level {

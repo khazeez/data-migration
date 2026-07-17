@@ -1,8 +1,8 @@
 version: "3"
 
+dotenv: [".env"]
+
 vars:
-  BINARY: sheet-loader
-  CONFIG: configs/app.yml
   JOB: master-data
 
 tasks:
@@ -12,18 +12,13 @@ tasks:
   build:
     desc: Build the binary
     cmds:
-      - go build -o "{{.BINARY}}" ./cmd/
-    sources:
-      - ./cmd/**/*.go
-      - ./internal/**/*.go
-    generates:
-      - "{{.BINARY}}"
+      - go build -o sheet-loader.exe ./cmd/
 
   clean:
     desc: Remove build artifacts
     cmds:
       - go clean
-      - rm -f "{{.BINARY}}"
+      - del /f sheet-loader.exe
 
   test:
     desc: Run all tests
@@ -31,22 +26,19 @@ tasks:
       - go test -v ./internal/...
 
   run:
-    desc: "Run job (default: master-data). Use -- job=<name> to change"
-    deps: [build]
+    desc: Execute job
     cmds:
-      - ./"{{.BINARY}}" -job "{{.JOB}}" -config "{{.CONFIG}}" {{.CLI_ARGS}}
+      - go run ./cmd/ -job "{{.JOB}}" {{.CLI_ARGS}}
 
   dry-run:
-    desc: Run job in dry-run mode
-    deps: [build]
+    desc: Validate without inserting
     cmds:
-      - ./"{{.BINARY}}" -job "{{.JOB}}" -config "{{.CONFIG}}" -dry-run {{.CLI_ARGS}}
+      - go run ./cmd/ -job "{{.JOB}}" -dry-run {{.CLI_ARGS}}
 
   list:
     desc: List available jobs
-    deps: [build]
     cmds:
-      - ./"{{.BINARY}}" -list -config "{{.CONFIG}}"
+      - go run ./cmd/ -list
 
   fmt:
     desc: Format Go source code

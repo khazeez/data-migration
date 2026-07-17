@@ -55,7 +55,13 @@ func (r *Runner) InitSheets(ctx context.Context) error {
 }
 
 func (r *Runner) InitDB(ctx context.Context) error {
-	d, err := db.Connect(r.appCfg.DSN())
+	d, err := db.Connect(db.ConnConfig{
+		Host:     r.appCfg.Database.Host,
+		Port:     r.appCfg.Database.Port,
+		User:     r.appCfg.Database.User,
+		Password: r.appCfg.Database.Password,
+		DBName:   r.appCfg.Database.DBName,
+	})
 	if err != nil {
 		return fmt.Errorf("init database: %w", err)
 	}

@@ -85,6 +85,10 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		return nil, fmt.Errorf("transform data: %w", err)
 	}
 
+	if imp.tableCfg.OnConflict != nil {
+		imp.log.Info("Conflict action: %s (keys: %v)", imp.tableCfg.OnConflict.Action, imp.tableCfg.OnConflict.Keys)
+	}
+
 	if imp.dryRun {
 		imp.log.Info("DRY RUN - would insert %d rows into %s", len(rows), imp.tableCfg.Table)
 		imp.log.Info("Columns: %v", columns)
@@ -95,7 +99,6 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		return result, nil
 	}
 
-	imp.log.Info("Inserting %d rows into %s (batch size: %d)...", len(rows), imp.tableCfg.Table, imp.batchSize)
 	tx, err := imp.database.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -110,11 +113,26 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		}
 	}()
 
-	if err := imp.database.Truncate(ctx, tx, imp.tableCfg.Table); err != nil {
-		return nil, fmt.Errorf("truncate table %s: %w", imp.tableCfg.Table, err)
+	if imp.tableCfg.OnConflict != nil && imp.tableCfg.OnConflict.Action == "ignore" {
+		rows, err = imp.filterExisting(ctx, tx, columns, rows)
+		if err != nil {
+			return nil, fmt.Errorf("filter existing: %w", err)
+		}
 	}
 
-	if err := imp.database.BatchInsert(ctx, tx, imp.tableCfg.Table, columns, rows, imp.batchSize); err != nil {
+	if len(rows) == 0 {
+		imp.log.Info("No rows to insert into %s", imp.tableCfg.Table)
+		result.Duration = time.Since(start)
+		rollback = false
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("commit tx: %w", err)
+		}
+		return result, nil
+	}
+
+	imp.log.Info("Inserting %d rows into %s (batch size: %d)...", len(rows), imp.tableCfg.Table, imp.batchSize)
+	conflict := resolveConflict(imp.tableCfg.OnConflict)
+	if err := imp.database.BatchInsert(ctx, tx, imp.tableCfg.Table, columns, rows, imp.batchSize, conflict); err != nil {
 		return nil, fmt.Errorf("batch insert: %w", err)
 	}
 
@@ -129,4 +147,53 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	imp.log.Info("Successfully inserted %d rows into %s (%v)", result.Inserted, imp.tableCfg.Table, result.Duration)
 
 	return result, nil
+}
+
+func (imp *Importer) filterExisting(ctx context.Context, tx db.Transaction, columns []string, rows [][]interface{}) ([][]interface{}, error) {
+	keyCol := imp.tableCfg.OnConflict.Keys[0]
+	keyIdx := -1
+	for i, col := range columns {
+		if col == keyCol {
+			keyIdx = i
+			break
+		}
+	}
+	if keyIdx < 0 {
+		return nil, fmt.Errorf("identify column %q not found in columns", keyCol)
+	}
+
+	values := make([]interface{}, len(rows))
+	for i, row := range rows {
+		values[i] = row[keyIdx]
+	}
+
+	existing, err := imp.database.FilterExisting(ctx, tx, imp.tableCfg.Table, keyCol, values)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered [][]interface{}
+	for _, row := range rows {
+		key := fmt.Sprintf("%v", row[keyIdx])
+		if !existing[key] {
+			filtered = append(filtered, row)
+		}
+	}
+
+	skipped := len(rows) - len(filtered)
+	if skipped > 0 {
+		imp.log.Info("Skipped %d rows (already exist)", skipped)
+	}
+
+	return filtered, nil
+}
+
+func resolveConflict(cfg *config.ConflictConfig) *db.ConflictClause {
+	if cfg == nil || cfg.Action == "ignore" {
+		return nil
+	}
+	return &db.ConflictClause{
+		Action: cfg.Action,
+		Keys:   cfg.Keys,
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
@@ -13,11 +14,13 @@ type AppConfig struct {
 	Google   GoogleConfig   `yaml:"google"`
 }
 
+// DSN mengembalikan connection string format key=value (dipakai oleh sebagian driver).
 func (c *AppConfig) DSN() string {
 	return fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=disable",
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
+		c.Database.Host, c.Database.Port,
 		c.Database.User, c.Database.Password,
-		c.Database.Host, c.Database.Port, c.Database.DBName,
+		c.Database.DBName,
 	)
 }
 
@@ -33,11 +36,17 @@ type GoogleConfig struct {
 	Credential string `yaml:"credential"`
 }
 
+type ConflictConfig struct {
+	Action string   `yaml:"action"`
+	Keys   []string `yaml:"keys"`
+}
+
 type TableConfig struct {
-	Sheet    SheetConfig            `yaml:"sheet"`
-	Table    string                 `yaml:"table"`
-	Mapping  map[string]ColumnMap   `yaml:"mapping"`
-	Defaults map[string]interface{} `yaml:"defaults"`
+	Sheet      SheetConfig            `yaml:"sheet"`
+	Table      string                 `yaml:"table"`
+	Mapping    map[string]ColumnMap   `yaml:"mapping"`
+	Defaults   map[string]interface{} `yaml:"defaults"`
+	OnConflict *ConflictConfig        `yaml:"on_conflict,omitempty"`
 }
 
 type SheetConfig struct {
@@ -56,15 +65,40 @@ type JobConfig struct {
 }
 
 func LoadApp(path string) (*AppConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read app config: %w", err)
-	}
 	var cfg AppConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse app config: %w", err)
+	if path != "" {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			if err := yaml.Unmarshal(data, &cfg); err != nil {
+				return nil, fmt.Errorf("parse app config: %w", err)
+			}
+		}
 	}
+	applyEnvOverrides(&cfg)
 	return &cfg, nil
+}
+
+func applyEnvOverrides(cfg *AppConfig) {
+	if v := os.Getenv("DB_HOST"); v != "" {
+		cfg.Database.Host = v
+	}
+	if v := os.Getenv("DB_PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil {
+			cfg.Database.Port = p
+		}
+	}
+	if v := os.Getenv("DB_USER"); v != "" {
+		cfg.Database.User = v
+	}
+	if v := os.Getenv("DB_PASSWORD"); v != "" {
+		cfg.Database.Password = v
+	}
+	if v := os.Getenv("DB_NAME"); v != "" {
+		cfg.Database.DBName = v
+	}
+	if v := os.Getenv("GOOGLE_CREDENTIAL"); v != "" {
+		cfg.Google.Credential = v
+	}
 }
 
 func LoadTable(path string) (*TableConfig, error) {

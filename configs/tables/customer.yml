@@ -1,0 +1,21 @@
+sheet:
+  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
+  worksheet: migrasi test
+
+table: customer
+
+mapping:
+  nama:
+    column: name
+  umur:
+    column: age
+  script:
+    column: script
+
+defaults:
+  id: uuid
+  timestamp: now
+
+on_conflict:
+  action: ignore
+  keys: [name]
