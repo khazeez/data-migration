@@ -1,0 +1,24 @@
+sheet:
+  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
+  worksheet: transaction
+
+table: transaction
+
+mapping:
+  customer:
+    column: customer_id
+    transform: lookup
+    lookup:
+      table: customer
+      from: name
+      to: id
+  transaction:
+    column: transaction_name
+
+defaults:
+  id: uuid
+  timestamp: now
+
+on_conflict:
+  action: ignore
+  keys: []

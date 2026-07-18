@@ -60,10 +60,17 @@ type SheetConfig struct {
 	Worksheet     string `yaml:"worksheet"`
 }
 
+type LookupConfig struct {
+	Table string `yaml:"table"`
+	From  string `yaml:"from"`
+	To    string `yaml:"to"`
+}
+
 type ColumnMap struct {
-	Column    string `yaml:"column"`
-	Required  bool   `yaml:"required,omitempty"`
-	Transform string `yaml:"transform,omitempty"`
+	Column    string        `yaml:"column"`
+	Required  bool          `yaml:"required,omitempty"`
+	Transform string        `yaml:"transform,omitempty"`
+	Lookup    *LookupConfig `yaml:"lookup,omitempty"`
 }
 
 type JobConfig struct {

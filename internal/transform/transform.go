@@ -42,7 +42,7 @@ func (t *Transformer) TransformRow(headerIdx map[string]int, row []interface{}) 
 			}
 		}
 
-		if colMap.Transform != "" && val != nil {
+		if colMap.Transform != "" && colMap.Transform != "lookup" && val != nil {
 			val = applyTransform(val, colMap.Transform)
 		}
 

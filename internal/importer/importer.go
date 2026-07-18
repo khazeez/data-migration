@@ -93,6 +93,13 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		return nil, fmt.Errorf("transform data: %w", err)
 	}
 
+	if hasLookup(imp.tableCfg.Mapping) {
+		imp.log.Info("Resolving lookup values...")
+		if err := imp.resolveLookups(ctx, columns, rows); err != nil {
+			return nil, fmt.Errorf("resolve lookups: %w", err)
+		}
+	}
+
 	if imp.tableCfg.Filter != nil {
 		imp.log.Info("Filter: %s = %v", imp.tableCfg.Filter.Column, imp.tableCfg.Filter.Value)
 	}
@@ -125,7 +132,7 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		}
 	}()
 
-	if imp.tableCfg.OnConflict != nil && imp.tableCfg.OnConflict.Action == "ignore" {
+	if imp.tableCfg.OnConflict != nil && imp.tableCfg.OnConflict.Action == "ignore" && len(imp.tableCfg.OnConflict.Keys) > 0 {
 		rows, err = imp.filterExisting(ctx, tx, columns, rows)
 		if err != nil {
 			return nil, fmt.Errorf("filter existing: %w", err)
@@ -219,6 +226,95 @@ func (imp *Importer) filterExisting(ctx context.Context, tx db.Transaction, colu
 	}
 
 	return filtered, nil
+}
+
+func hasLookup(mapping map[string]config.ColumnMap) bool {
+	for _, cm := range mapping {
+		if cm.Lookup != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (imp *Importer) resolveLookups(ctx context.Context, columns []string, rows [][]interface{}) error {
+	type lookupJob struct {
+		idx   int
+		col   string
+		table string
+		from  string
+		to    string
+	}
+
+	var jobs []lookupJob
+	for sheetCol, cm := range imp.tableCfg.Mapping {
+		if cm.Lookup == nil {
+			continue
+		}
+		for i, col := range columns {
+			if col == cm.Column {
+				jobs = append(jobs, lookupJob{
+					idx:   i,
+					col:   col,
+					table: cm.Lookup.Table,
+					from:  cm.Lookup.From,
+					to:    cm.Lookup.To,
+				})
+				imp.log.Info("Lookup %s → %s.%s (%s = %s.%s)", sheetCol, cm.Lookup.Table, cm.Lookup.To, cm.Lookup.From, cm.Lookup.Table, cm.Lookup.To)
+				break
+			}
+		}
+	}
+
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	for _, j := range jobs {
+		seen := make(map[string]bool)
+		var uniqueVals []interface{}
+		for _, row := range rows {
+			if j.idx < len(row) && row[j.idx] != nil {
+				key := fmt.Sprintf("%v", row[j.idx])
+				if !seen[key] {
+					seen[key] = true
+					uniqueVals = append(uniqueVals, row[j.idx])
+				}
+			}
+		}
+
+		if len(uniqueVals) == 0 {
+			continue
+		}
+
+		if imp.dryRun {
+			imp.log.Info("DRY RUN - would resolve %d values: %v", len(uniqueVals), uniqueVals)
+			continue
+		}
+
+		imp.log.Info("Resolving %d unique values for %s...", len(uniqueVals), j.col)
+		resolved, err := imp.database.LookupValues(ctx, j.table, j.from, j.to, uniqueVals)
+		if err != nil {
+			return fmt.Errorf("lookup %s.%s: %w", j.table, j.from, err)
+		}
+
+		resolvedCount := 0
+		for _, row := range rows {
+			if j.idx < len(row) && row[j.idx] != nil {
+				key := fmt.Sprintf("%v", row[j.idx])
+				if v, ok := resolved[key]; ok {
+					row[j.idx] = v
+					resolvedCount++
+				} else {
+					imp.log.Warn("Lookup value %q not found in %s.%s", row[j.idx], j.table, j.from)
+					row[j.idx] = nil
+				}
+			}
+		}
+		imp.log.Info("Resolved %d/%d values for %s", resolvedCount, len(rows), j.col)
+	}
+
+	return nil
 }
 
 func resolveConflict(cfg *config.ConflictConfig) *db.ConflictClause {

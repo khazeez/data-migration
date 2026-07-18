@@ -21,7 +21,7 @@ defaults:
 
 filter:
   column: status
-  value: inactive
+  value: active
 
 on_conflict:
   action: ignore

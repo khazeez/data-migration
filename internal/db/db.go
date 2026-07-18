@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -177,6 +178,43 @@ func (d *DB) FilterExisting(ctx context.Context, tx Transaction, table string, i
 		existing[fmt.Sprintf("%v", val)] = true
 	}
 	return existing, nil
+}
+
+func (d *DB) LookupValues(ctx context.Context, table, fromCol, toCol string, values []interface{}) (map[string]interface{}, error) {
+	if len(values) == 0 {
+		return map[string]interface{}{}, nil
+	}
+
+	placeholders := make([]string, len(values))
+	args := make([]interface{}, len(values))
+	for i, v := range values {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = v
+	}
+
+	query := fmt.Sprintf("SELECT DISTINCT %s, %s FROM %s WHERE %s IN (%s)",
+		fromCol, toCol, table, fromCol, strings.Join(placeholders, ", "))
+
+	rows, err := d.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("lookup query: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]interface{})
+	for rows.Next() {
+		var from string
+		var to interface{}
+		if err := rows.Scan(&from, &to); err != nil {
+			return nil, fmt.Errorf("lookup scan: %w", err)
+		}
+		if b, ok := to.([16]uint8); ok {
+			to = uuid.UUID(b).String()
+		}
+		result[from] = to
+	}
+
+	return result, nil
 }
 
 func (d *DB) Truncate(ctx context.Context, tx Transaction, table string) error {

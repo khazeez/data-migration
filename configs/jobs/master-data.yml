@@ -1,3 +1,4 @@
 name: master-data
 tables:
   - customer
+  - transaction

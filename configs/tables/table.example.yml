@@ -17,11 +17,21 @@ defaults:
   updated_at: now
   created_by: system
 
-# Opsional: transform value yang didukung
+# Opsional: transform yang didukung
 # string_to_bool   : Y/N, yes/no, 1/0, true/false, active/inactive, deployed/undeployed → boolean
 # lower            : "Nama" → "nama"
 # upper            : "nama" → "NAMA"
 # trim             : "  nama  " → "nama"
+# lookup           : ganti nilai dengan hasil query ke tabel lain
+#
+# Contoh lookup:
+#   customer_name:              # kolom sheet
+#     column: customer_id       # kolom DB (FK)
+#     transform: lookup
+#     lookup:
+#       table: customer         # tabel tujuan
+#       from: name              # kolom dicocokkan
+#       to: id                  # kolom diambil nilainya
 
 # Opsional: filter baris yang akan di-insert
 # filter:
