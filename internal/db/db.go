@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -208,8 +209,11 @@ func (d *DB) LookupValues(ctx context.Context, table, fromCol, toCol string, val
 		if err := rows.Scan(&from, &to); err != nil {
 			return nil, fmt.Errorf("lookup scan: %w", err)
 		}
-		if b, ok := to.([16]uint8); ok {
-			to = uuid.UUID(b).String()
+		switch v := to.(type) {
+		case [16]uint8:
+			to = uuid.UUID(v).String()
+		case pgtype.UUID:
+			to = uuid.UUID(v.Bytes).String()
 		}
 		result[from] = to
 	}
