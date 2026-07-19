@@ -38,7 +38,10 @@ defaults:
 #   column: is_active
 #   value: true
 
-# Opsional: atur perilaku saat ada duplicate key
+# Opsional: buang duplikat berdasarkan kolom tertentu (hanya keep first occurrence)
+# unique: [name]
+
+# Opsional: atur perilaku saat ada duplicate key di database
 # on_conflict:
 #   action: ignore    # skip duplikat (tanpa perlu unique index)
 #   keys: [name]

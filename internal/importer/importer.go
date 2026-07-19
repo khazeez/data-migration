@@ -93,6 +93,12 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		return nil, fmt.Errorf("transform data: %w", err)
 	}
 
+	if len(imp.tableCfg.Unique) > 0 {
+		before := len(rows)
+		rows = deduplicateRows(columns, rows, imp.tableCfg.Unique)
+		imp.log.Info("Deduplicated: %d unique rows (removed %d duplicates)", len(rows), before-len(rows))
+	}
+
 	if hasLookup(imp.tableCfg.Mapping) {
 		imp.log.Info("Resolving lookup values...")
 		if err := imp.resolveLookups(ctx, columns, rows); err != nil {
@@ -226,6 +232,36 @@ func (imp *Importer) filterExisting(ctx context.Context, tx db.Transaction, colu
 	}
 
 	return filtered, nil
+}
+
+func deduplicateRows(columns []string, rows [][]interface{}, keys []string) [][]interface{} {
+	keyIdx := make([]int, 0, len(keys))
+	for _, k := range keys {
+		for i, col := range columns {
+			if col == k {
+				keyIdx = append(keyIdx, i)
+				break
+			}
+		}
+	}
+
+	if len(keyIdx) != len(keys) {
+		return rows
+	}
+
+	seen := make(map[string]bool)
+	var result [][]interface{}
+	for _, row := range rows {
+		var parts string
+		for _, idx := range keyIdx {
+			parts += fmt.Sprintf("%v|", row[idx])
+		}
+		if !seen[parts] {
+			seen[parts] = true
+			result = append(result, row)
+		}
+	}
+	return result
 }
 
 func hasLookup(mapping map[string]config.ColumnMap) bool {

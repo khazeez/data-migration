@@ -53,6 +53,7 @@ type TableConfig struct {
 	Defaults   map[string]interface{} `yaml:"defaults"`
 	OnConflict *ConflictConfig        `yaml:"on_conflict,omitempty"`
 	Filter     *FilterConfig          `yaml:"filter,omitempty"`
+	Unique     []string               `yaml:"unique,omitempty"`
 }
 
 type SheetConfig struct {
