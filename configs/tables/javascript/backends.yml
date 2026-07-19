@@ -5,7 +5,6 @@ sheet:
 table: backends
 
 #column di database
-
 mapping:
   connection:
     column: name
@@ -42,14 +41,14 @@ defaults:
 
 
 #Filter daeri sheet
-
 filter:
   column: Is Deployed
   value: Deployed
 
-#column 
-unique: [name] 
+#column sheet dengan value unik
+unique: [name]
 
+#mencegah ada data yang duplicate di db
 on_conflict:
   action: ignore
   keys: [name]
