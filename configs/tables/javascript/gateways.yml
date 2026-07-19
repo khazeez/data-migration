@@ -27,7 +27,7 @@ defaults:
   created_at: now
   updated_at: now
   active: true
-  is_deployed: true
+  is_deployed: false
 
 filter:
   column: status
