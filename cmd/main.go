@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"	
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -17,6 +17,7 @@ func main() {
 		appCfgPath string
 		jobName    string
 		listJobs   bool
+		runAll     bool
 		dryRun     bool
 		batchSize  int
 		logLevel   string
@@ -25,10 +26,15 @@ func main() {
 	flag.StringVar(&appCfgPath, "config", "", "Path to app config file (optional)")
 	flag.StringVar(&jobName, "job", "", "Job name to execute")
 	flag.BoolVar(&listJobs, "list", false, "List available jobs")
+	flag.BoolVar(&runAll, "all", false, "Run all available jobs")
 	flag.BoolVar(&dryRun, "dry-run", false, "Dry run mode (no DB changes)")
 	flag.IntVar(&batchSize, "batch", 500, "Batch insert size")
 	flag.StringVar(&logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
 	flag.Parse()
+
+	if jobName == "" && flag.NArg() > 0 {
+		jobName = flag.Arg(0)
+	}
 
 	level := parseLogLevel(logLevel)
 	log := logger.New(level)
@@ -66,12 +72,6 @@ func main() {
 		return
 	}
 
-	if jobName == "" {
-		log.Error("Job name is required. Use --job flag or --list to see available jobs")
-		flag.Usage()
-		os.Exit(1)
-	}
-
 	ctx := context.Background()
 
 	if err := runner.InitSheets(ctx); err != nil {
@@ -85,6 +85,32 @@ func main() {
 			log.Error("Failed to init database: %v", err)
 			os.Exit(1)
 		}
+	}
+
+	if runAll {
+		allJobs, err := runner.ListJobs()
+		if err != nil {
+			log.Error("Failed to list jobs: %v", err)
+			os.Exit(1)
+		}
+		if len(allJobs) == 0 {
+			log.Info("No jobs found")
+			return
+		}
+		for _, j := range allJobs {
+			log.Info("=== Running job: %s ===", j)
+			if err := runner.RunJob(ctx, j); err != nil {
+				log.Error("Job %s failed: %v", j, err)
+				os.Exit(1)
+			}
+		}
+		return
+	}
+
+	if jobName == "" {
+		log.Error("Job name required. Use: go run ./cmd/ <job>, -job <job>, -all, or -list")
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	if err := runner.RunJob(ctx, jobName); err != nil {

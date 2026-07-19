@@ -41,10 +41,13 @@ defaults:
   proto_location: ""
 
 
+#Filter daeri sheet
+
 filter:
   column: Is Deployed
   value: Deployed
 
+#column 
 unique: [name] 
 
 on_conflict:

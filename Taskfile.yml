@@ -26,14 +26,19 @@ tasks:
       - go test -v ./internal/...
 
   run:
-    desc: Execute job
+    desc: Execute job (e.g. task run -- backend-api)
     cmds:
-      - go run ./cmd/ -job "{{.JOB}}" {{.CLI_ARGS}}
+      - go run ./cmd/ {{default "master-data" .CLI_ARGS}}
 
   dry-run:
     desc: Validate without inserting
     cmds:
-      - go run ./cmd/ -job "{{.JOB}}" -dry-run {{.CLI_ARGS}}
+      - go run ./cmd/ -dry-run {{default "master-data" .CLI_ARGS}}
+
+  run-all:
+    desc: Execute all jobs
+    cmds:
+      - go run ./cmd/ -all
 
   list:
     desc: List available jobs
