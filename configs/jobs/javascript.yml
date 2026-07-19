@@ -1,0 +1,5 @@
+name: master-data
+tables:
+  - javascript/backends
+  - javascript/endpoints
+  - javascript/gateways
