@@ -20,11 +20,6 @@ tasks:
       - go clean
       - del /f sheet-loader.exe
 
-  test:
-    desc: Run all tests
-    cmds:
-      - go test -v ./internal/...
-
   run:
     desc: Execute job (e.g. task run -- backend-api)
     cmds:
