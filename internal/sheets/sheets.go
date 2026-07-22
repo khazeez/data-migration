@@ -62,7 +62,9 @@ func (c *Client) ReadSheet(ctx context.Context, spreadsheetID, worksheet string)
 	for _, row := range resp.Values[1:] {
 		typedRow := make([]interface{}, len(headers))
 		for j, cell := range row {
-			typedRow[j] = cell
+			if j < len(headers) {
+				typedRow[j] = cell
+			}
 		}
 		rows = append(rows, typedRow)
 	}

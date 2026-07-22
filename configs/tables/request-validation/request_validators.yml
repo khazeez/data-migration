@@ -1,0 +1,27 @@
+sheet:
+  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
+  worksheet: Interceptor
+
+table: request_validators
+
+#column di database
+mapping:
+  name:
+    column: name
+  Script Konversi:
+    column: validator
+
+defaults:
+  id: uuid
+  created_at: now
+  updated_at: now
+  active: true
+
+
+#column sheet dengan value unik
+unique: [name]
+
+#mencegah ada data yang duplicate di db
+on_conflict:
+  action: ignore
+  keys: [name]

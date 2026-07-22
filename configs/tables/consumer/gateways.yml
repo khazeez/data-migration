@@ -30,8 +30,8 @@ defaults:
   is_deployed: false
 
 filter:
-  column: Is Deployed
-  value: Deployed
+  column: status
+  value: active
 
 on_conflict:
   action: ignore

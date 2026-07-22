@@ -1,4 +1,4 @@
-name: master-data
+name: javascript
 tables:
   - javascript/backends
   - javascript/endpoints
