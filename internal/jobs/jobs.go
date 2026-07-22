@@ -109,12 +109,18 @@ func (r *Runner) RunJob(ctx context.Context, jobName string) error {
 
 		totalRows += result.Inserted
 
-		r.log.Info("Table %s done: %d rows inserted, %d errors, %v elapsed",
-			tableCfg.Table, result.Inserted, result.Errors, result.Duration)
+		r.log.Info("  ↳ %s: %d rows inserted | %v", tableCfg.Table, result.Inserted, result.Duration)
 	}
 
 	totalDur := time.Since(totalStart)
-	r.log.Info("Job %s completed: %d rows total, %v elapsed", jobName, totalRows, totalDur)
+	var jobsNote string
+	if r.dryRun {
+		jobsNote = " (dry-run)"
+	}
+	r.log.Info("========================================")
+	r.log.Info("Job%s complete: %s | %d tables | %d rows total | %v elapsed",
+		jobsNote, jobName, len(jobCfg.Tables), totalRows, totalDur)
+	r.log.Info("========================================")
 
 	return nil
 }

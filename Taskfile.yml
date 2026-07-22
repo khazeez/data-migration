@@ -3,7 +3,7 @@ version: "3"
 dotenv: [".env"]
 
 vars:
-  JOB: javascript
+  JOB: master-data
 
 tasks:
   default:

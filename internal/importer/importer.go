@@ -53,6 +53,7 @@ func (imp *Importer) SetBatchSize(n int) {
 func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	start := time.Now()
 	result := &Result{Table: imp.tableCfg.Table}
+	stats := newRowStats()
 
 	imp.log.Info("Reading sheet %s...", imp.tableCfg.Sheet.Worksheet)
 	sheetData, err := imp.sheetsCli.ReadSheet(ctx, imp.tableCfg.Sheet.SpreadsheetID, imp.tableCfg.Sheet.Worksheet)
@@ -65,6 +66,9 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		result.Duration = time.Since(start)
 		return result, nil
 	}
+
+	stats.raw = len(sheetData.Rows)
+	imp.log.Info("Read %d rows, %d columns from sheet", stats.raw, len(sheetData.Headers))
 
 	imp.log.Info("Validating headers...")
 	valReport := validator.ValidateHeaders(sheetData.Headers, imp.tableCfg)
@@ -82,8 +86,9 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	if imp.tableCfg.Filter != nil {
 		before := len(sheetData.Rows)
 		sheetData.Rows = filterRows(sheetData.Headers, sheetData.Rows, imp.tableCfg.Filter)
-		if len(sheetData.Rows) < before {
-			imp.log.Info("Filtered out %d rows (not matching %s = %v)", before-len(sheetData.Rows), imp.tableCfg.Filter.Column, imp.tableCfg.Filter.Value)
+		stats.filtered = before - len(sheetData.Rows)
+		if stats.filtered > 0 {
+			imp.log.Info("Filtered out %d rows (not matching %s = %v)", stats.filtered, imp.tableCfg.Filter.Column, imp.tableCfg.Filter.Value)
 		}
 	}
 
@@ -92,11 +97,15 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("transform data: %w", err)
 	}
+	stats.transformed = len(rows)
 
 	if len(imp.tableCfg.Unique) > 0 {
 		before := len(rows)
 		rows = deduplicateRows(columns, rows, imp.tableCfg.Unique)
-		imp.log.Info("Deduplicated: %d unique rows (removed %d duplicates)", len(rows), before-len(rows))
+		stats.deduped = before - len(rows)
+		if stats.deduped > 0 {
+			imp.log.Info("Deduplicated: %d unique rows (removed %d duplicates)", len(rows), stats.deduped)
+		}
 	}
 
 	if hasLookup(imp.tableCfg.Mapping) {
@@ -115,10 +124,12 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	}
 
 	if imp.dryRun {
-		imp.log.Info("DRY RUN - would insert %d rows into %s", len(rows), imp.tableCfg.Table)
-		imp.log.Info("Columns: %v", columns)
+		imp.log.Info("Dry-run result: %d rows would be inserted into %s", len(rows), imp.tableCfg.Table)
+		imp.log.Info("  Pipeline: %d raw → %d filtered → %d transformed → %d deduped → %d ready",
+			stats.raw, stats.filtered, stats.transformed, stats.deduped, len(rows))
+		imp.log.Info("  Columns: %v", columns)
 		if len(rows) > 0 {
-			imp.log.Info("First row sample: %v", rows[0])
+			imp.log.Info("  First row sample: %v", rows[0])
 		}
 		result.Duration = time.Since(start)
 		return result, nil
@@ -139,14 +150,21 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	}()
 
 	if imp.tableCfg.OnConflict != nil && imp.tableCfg.OnConflict.Action == "ignore" && len(imp.tableCfg.OnConflict.Keys) > 0 {
+		before := len(rows)
 		rows, err = imp.filterExisting(ctx, tx, columns, rows)
 		if err != nil {
 			return nil, fmt.Errorf("filter existing: %w", err)
 		}
+		stats.existing = before - len(rows)
+		if stats.existing > 0 {
+			imp.log.Info("Skipped %d rows (already exist in database)", stats.existing)
+		}
 	}
 
 	if len(rows) == 0 {
-		imp.log.Info("No rows to insert into %s", imp.tableCfg.Table)
+		imp.log.Info("No rows to insert into %s — all rows filtered or already exist", imp.tableCfg.Table)
+		imp.log.Info("  Pipeline: %d raw → %d filtered → %d transformed → %d deduped → %d skipped(existing) → 0 inserted",
+			stats.raw, stats.filtered, stats.transformed, stats.deduped, stats.existing)
 		result.Duration = time.Since(start)
 		rollback = false
 		if err := tx.Commit(ctx); err != nil {
@@ -169,9 +187,23 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	result.Inserted = len(rows)
 	result.Duration = time.Since(start)
 
-	imp.log.Info("Successfully inserted %d rows into %s (%v)", result.Inserted, imp.tableCfg.Table, result.Duration)
+	imp.log.Info("✓ Table %s: %d rows inserted | Pipeline: %d raw → %d filtered → %d transformed → %d deduped → %d existing → %d inserted (%v)",
+		imp.tableCfg.Table, result.Inserted,
+		stats.raw, stats.filtered, stats.transformed, stats.deduped, stats.existing, result.Inserted, result.Duration)
 
 	return result, nil
+}
+
+type rowStats struct {
+	raw         int
+	filtered    int
+	transformed int
+	deduped     int
+	existing    int
+}
+
+func newRowStats() *rowStats {
+	return &rowStats{}
 }
 
 func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) [][]interface{} {

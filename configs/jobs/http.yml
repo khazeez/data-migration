@@ -1,0 +1,5 @@
+name: http
+tables:
+  - http/backends
+  - http/endpoints
+  - http/gateways

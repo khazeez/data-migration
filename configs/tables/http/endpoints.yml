@@ -1,11 +1,11 @@
 sheet:
   spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
-  worksheet: Javascript
+  worksheet: HTTP
 
 table: endpoints
 
 mapping:
-  connection:
+  Connection:
     column: backend_id
     transform: lookup
     lookup:
@@ -14,12 +14,20 @@ mapping:
       to: id
   Endpoint Path:
     column: path
-  method:
+  Method:
     column: method
-  access:
+  Access:
     column: type
-  Script:
-    column: javascript
+  Allowed Headers:
+    column: allowed_headers
+  Interceptor:
+    column: request_validator_id
+    transform: lookup
+    lookup:
+      table: request_validators
+      from: name
+      to: id
+
 
 defaults:
   id: uuid
@@ -27,14 +35,30 @@ defaults:
   updated_at: now
   active: true
   skip_activity_log: false
+  allowed_response_headers: ""
+  sql_statement: ""
+  javascript: ""
+  response: ""
   request_timeout: 0
   rate_limit: 0
   rate_limit_type: second
   enable_cors: false
+  allow_origin: ""
+  allow_headers: ""
+  allow_credential: ""
+  expose_headers: ""
+  max_age: 0
+  allow_private_network: false
+  grpc_service: ""
+  webhook_url: ""
+  request_transformer_id: ""
+  log_transformer_id: ""
 
 filter:
-  column: status
-  value: active
+  column: Is Deployed
+  value: Deployed
+
+unique: [path]
 
 on_conflict:
   action: ignore
