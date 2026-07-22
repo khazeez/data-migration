@@ -88,7 +88,7 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		sheetData.Rows = filterRows(sheetData.Headers, sheetData.Rows, imp.tableCfg.Filter)
 		stats.filtered = before - len(sheetData.Rows)
 		if stats.filtered > 0 {
-			imp.log.Info("Filtered out %d rows (not matching %s = %v)", stats.filtered, imp.tableCfg.Filter.Column, imp.tableCfg.Filter.Value)
+			imp.log.Info("Filtered out %d rows (not matching %s in %v)", stats.filtered, imp.tableCfg.Filter.Column, filterValues(imp.tableCfg.Filter))
 		}
 	}
 
@@ -116,7 +116,7 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	}
 
 	if imp.tableCfg.Filter != nil {
-		imp.log.Info("Filter: %s = %v", imp.tableCfg.Filter.Column, imp.tableCfg.Filter.Value)
+		imp.log.Info("Filter: %s in %v", imp.tableCfg.Filter.Column, filterValues(imp.tableCfg.Filter))
 	}
 
 	if imp.tableCfg.OnConflict != nil {
@@ -220,11 +220,29 @@ func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) 
 
 	var filtered [][]interface{}
 	for _, row := range rows {
-		if idx < len(row) && fmt.Sprintf("%v", row[idx]) == fmt.Sprintf("%v", f.Value) {
+		if idx >= len(row) {
+			continue
+		}
+		val := fmt.Sprintf("%v", row[idx])
+		if len(f.Values) > 0 {
+			for _, v := range f.Values {
+				if val == fmt.Sprintf("%v", v) {
+					filtered = append(filtered, row)
+					break
+				}
+			}
+		} else if val == fmt.Sprintf("%v", f.Value) {
 			filtered = append(filtered, row)
 		}
 	}
 	return filtered
+}
+
+func filterValues(f *config.FilterConfig) interface{} {
+	if len(f.Values) > 0 {
+		return f.Values
+	}
+	return f.Value
 }
 
 func (imp *Importer) filterExisting(ctx context.Context, tx db.Transaction, columns []string, rows [][]interface{}) ([][]interface{}, error) {

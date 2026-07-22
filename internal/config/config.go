@@ -42,8 +42,9 @@ type ConflictConfig struct {
 }
 
 type FilterConfig struct {
-	Column string      `yaml:"column"`
-	Value  interface{} `yaml:"value"`
+	Column string        `yaml:"column"`
+	Value  interface{}   `yaml:"value,omitempty"`
+	Values []interface{} `yaml:"values,omitempty"`
 }
 
 type TableConfig struct {

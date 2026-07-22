@@ -1,0 +1,5 @@
+name: consumer
+tables:
+  - consumer/backends
+  - consumer/endpoints
+  - consumer/gateways

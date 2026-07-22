@@ -1,0 +1,42 @@
+sheet:
+  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
+  worksheet: Consumer Client
+
+table: clients
+
+mapping:
+  group:
+    column: group_id
+    transform: lookup
+    lookup:
+      table: groups
+      from: name
+      to: id
+  name:
+    column: name
+  Expired Date:
+    column: expired_date
+  Username:
+    column: api_key
+  Password: 
+    column: token
+  IP Whitelist:
+    column: ip_whitelist
+  type:
+    column: type
+
+defaults:
+  id: uuid
+  created_at: now
+  updated_at: now
+  active: true
+
+filter:
+  column: type
+  values: [oauth, apikey]
+
+unique: [name]
+
+on_conflict:
+  action: ignore
+  keys: [name]

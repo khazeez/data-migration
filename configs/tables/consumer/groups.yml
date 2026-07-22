@@ -1,0 +1,30 @@
+sheet:
+  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
+  worksheet: Consumer Group
+
+table: groups
+
+#column di database
+mapping:
+  Group:
+    column: name
+
+defaults:
+  id: uuid
+  created_at: now
+  updated_at: now
+  active: true
+
+
+#Filter daeri sheet
+filter:
+  column: Status
+  value: active
+
+#column sheet dengan value unik
+unique: [name]
+
+#mencegah ada data yang duplicate di db
+on_conflict:
+  action: ignore
+  keys: [name]
