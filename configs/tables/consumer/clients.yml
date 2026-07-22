@@ -1,21 +1,19 @@
 sheet:
   spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
-  worksheet: Javascript
+  worksheet: Consumer Client
 
-table: gateways
+table: clients
 
 mapping:
-  client:
-    column: client_id
+  group:
+    column: group_id
     transform: lookup
     lookup:
-      table: clients
+      table: groups
       from: name
       to: id
-  Username:
-    column: api_key
-  Password:
-    column: token
+  name:
+    column: name
 
 defaults:
   id: uuid
@@ -27,6 +25,8 @@ filter:
   column: status
   value: active
 
+unique: [name]
+
 on_conflict:
   action: ignore
-  keys: []
+  keys: [name]

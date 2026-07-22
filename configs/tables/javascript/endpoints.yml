@@ -20,6 +20,13 @@ mapping:
     column: type
   Script:
     column: javascript
+  Interceptor:
+    column: request_validator_id
+    transform: lookup
+    lookup:
+      table: request_validators
+      from: name
+      to: id
 
 defaults:
   id: uuid

@@ -1,5 +1,6 @@
 name: consumer
 tables:
-  - consumer/backends
-  - consumer/endpoints
-  - consumer/gateways
+  - consumer/groups
+  - consumer/clients
+  - consumer/credentials-token
+  - consumer/credentials-basic
