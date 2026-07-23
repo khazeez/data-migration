@@ -34,7 +34,7 @@ filter:
 
 
 #column db dengan value unik
-unique: [gateway_id]
+unique: []
 
 #mencegah ada data yang duplicate di db
 on_conflict:

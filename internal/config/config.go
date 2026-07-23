@@ -78,7 +78,8 @@ type ColumnMap struct {
 
 type JobConfig struct {
 	Name   string   `yaml:"name"`
-	Tables []string `yaml:"tables"`
+	Tables []string `yaml:"tables,omitempty"`
+	Jobs   []string `yaml:"jobs,omitempty"`
 }
 
 func LoadApp(path string) (*AppConfig, error) {

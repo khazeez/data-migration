@@ -82,6 +82,27 @@ func (r *Runner) RunJob(ctx context.Context, jobName string) error {
 		return fmt.Errorf("load job %s: %w", jobName, err)
 	}
 
+	if len(jobCfg.Jobs) > 0 {
+		r.log.Info("Starting meta-job: %s (%d sub-jobs)", jobName, len(jobCfg.Jobs))
+		totalStart := time.Now()
+		for _, sub := range jobCfg.Jobs {
+			r.log.Info("--- Running sub-job: %s ---", sub)
+			if err := r.RunJob(ctx, sub); err != nil {
+				return err
+			}
+		}
+		totalDur := time.Since(totalStart)
+		jobsNote := ""
+		if r.dryRun {
+			jobsNote = " (dry-run)"
+		}
+		r.log.Info("========================================")
+		r.log.Info("All jobs%s complete: %s | %d sub-jobs | %v elapsed",
+			jobsNote, jobName, len(jobCfg.Jobs), totalDur)
+		r.log.Info("========================================")
+		return nil
+	}
+
 	r.log.Info("Starting job: %s (tables: %d)", jobName, len(jobCfg.Tables))
 
 	totalStart := time.Now()

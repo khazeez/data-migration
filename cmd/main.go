@@ -88,21 +88,9 @@ func main() {
 	}
 
 	if runAll {
-		allJobs, err := runner.ListJobs()
-		if err != nil {
-			log.Error("Failed to list jobs: %v", err)
+		if err := runner.RunJob(ctx, "_all"); err != nil {
+			log.Error("Failed: %v", err)
 			os.Exit(1)
-		}
-		if len(allJobs) == 0 {
-			log.Info("No jobs found")
-			return
-		}
-		for _, j := range allJobs {
-			log.Info("=== Running job: %s ===", j)
-			if err := runner.RunJob(ctx, j); err != nil {
-				log.Error("Job %s failed: %v", j, err)
-				os.Exit(1)
-			}
 		}
 		return
 	}

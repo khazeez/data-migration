@@ -1,0 +1,8 @@
+name: all
+jobs:
+  - consumer
+  - javascript
+  - http
+  
+  - group-endpoint
+  - req-val
