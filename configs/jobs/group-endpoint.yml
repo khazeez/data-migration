@@ -1,0 +1,3 @@
+name: client-gateways
+tables:
+  - group-endpoint/client_gateways

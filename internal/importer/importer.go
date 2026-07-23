@@ -83,12 +83,14 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 	headerIdx := mapper.BuildHeaderIndex(sheetData.Headers)
 	t := transform.New(imp.tableCfg)
 
-	if imp.tableCfg.Filter != nil {
+	allFilters := collectFilters(imp.tableCfg)
+	for _, f := range allFilters {
 		before := len(sheetData.Rows)
-		sheetData.Rows = filterRows(sheetData.Headers, sheetData.Rows, imp.tableCfg.Filter)
-		stats.filtered = before - len(sheetData.Rows)
-		if stats.filtered > 0 {
-			imp.log.Info("Filtered out %d rows (not matching %s in %v)", stats.filtered, imp.tableCfg.Filter.Column, filterValues(imp.tableCfg.Filter))
+		sheetData.Rows = filterRows(sheetData.Headers, sheetData.Rows, &f)
+		filtered := before - len(sheetData.Rows)
+		stats.filtered += filtered
+		if filtered > 0 {
+			imp.log.Info("Filtered out %d rows (not matching %s in %v)", filtered, f.Column, filterValues(&f))
 		}
 	}
 
@@ -115,8 +117,8 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 		}
 	}
 
-	if imp.tableCfg.Filter != nil {
-		imp.log.Info("Filter: %s in %v", imp.tableCfg.Filter.Column, filterValues(imp.tableCfg.Filter))
+	for _, f := range allFilters {
+		imp.log.Info("Filter: %s in %v", f.Column, filterValues(&f))
 	}
 
 	if imp.tableCfg.OnConflict != nil {
@@ -243,6 +245,15 @@ func filterValues(f *config.FilterConfig) interface{} {
 		return f.Values
 	}
 	return f.Value
+}
+
+func collectFilters(cfg *config.TableConfig) []config.FilterConfig {
+	var all []config.FilterConfig
+	if cfg.Filter != nil {
+		all = append(all, *cfg.Filter)
+	}
+	all = append(all, cfg.Filters...)
+	return all
 }
 
 func (imp *Importer) filterExisting(ctx context.Context, tx db.Transaction, columns []string, rows [][]interface{}) ([][]interface{}, error) {

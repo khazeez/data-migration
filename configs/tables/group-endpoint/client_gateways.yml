@@ -1,0 +1,42 @@
+sheet:
+  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
+  worksheet: Group Endpoint
+
+table: client_gateways
+
+#column di database
+mapping:
+  Consumer Client:
+    column: client_id
+    transform: lookup
+    lookup:
+      table: clients
+      from: name
+      to: id
+  path:
+    column: gateway_id
+    transform: lookup
+    lookup:
+      table: gateways
+      from: path
+      to: id
+
+defaults:
+  id: uuid
+  created_at: now
+  updated_at: now
+  active: true
+
+#filter
+filter:
+  column: access
+  value: user
+
+
+#column db dengan value unik
+unique: [gateway_id]
+
+#mencegah ada data yang duplicate di db
+on_conflict:
+  action: ignore
+  keys: [gateway_id]

@@ -54,6 +54,7 @@ type TableConfig struct {
 	Defaults   map[string]interface{} `yaml:"defaults"`
 	OnConflict *ConflictConfig        `yaml:"on_conflict,omitempty"`
 	Filter     *FilterConfig          `yaml:"filter,omitempty"`
+	Filters    []FilterConfig         `yaml:"filters,omitempty"`
 	Unique     []string               `yaml:"unique,omitempty"`
 }
 
