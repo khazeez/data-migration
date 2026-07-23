@@ -42,9 +42,11 @@ type ConflictConfig struct {
 }
 
 type FilterConfig struct {
-	Column string        `yaml:"column"`
-	Value  interface{}   `yaml:"value,omitempty"`
-	Values []interface{} `yaml:"values,omitempty"`
+	Column   string        `yaml:"column"`
+	Value    interface{}   `yaml:"value,omitempty"`
+	Values   []interface{} `yaml:"values,omitempty"`
+	NotEmpty bool          `yaml:"not_empty,omitempty"`
+	Not      bool          `yaml:"not,omitempty"`
 }
 
 type TableConfig struct {

@@ -86,13 +86,21 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 
 	allFilters := collectFilters(imp.tableCfg)
 	for _, f := range allFilters {
+		fv := filterValues(&f)
+		imp.log.Info("Applying filter: %s in %v", f.Column, fv)
+		colExists := columnExists(sheetData.Headers, f.Column)
+		if !colExists {
+			imp.log.Warn("Filter column %q not found in sheet headers — filter skipped", f.Column)
+		}
 		before := len(sheetData.Rows)
 		sheetData.Rows = filterRows(sheetData.Headers, sheetData.Rows, &f)
 		filtered := before - len(sheetData.Rows)
 		stats.filtered += filtered
-		if filtered > 0 {
-			imp.log.Info("Filtered out %d rows (not matching %s in %v)", filtered, f.Column, filterValues(&f))
+		filterNote := ""
+		if !colExists {
+			filterNote = " (column not found)"
 		}
+		imp.log.Info("Filter result: %d rows kept, %d rows filtered out%s", len(sheetData.Rows), filtered, filterNote)
 	}
 
 	imp.log.Info("Transforming %d rows...", len(sheetData.Rows))
@@ -220,6 +228,15 @@ func newRowStats() *rowStats {
 	return &rowStats{}
 }
 
+func columnExists(columns []string, col string) bool {
+	for _, c := range columns {
+		if strings.EqualFold(c, col) {
+			return true
+		}
+	}
+	return false
+}
+
 func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) [][]interface{} {
 	idx := -1
 	for i, col := range columns {
@@ -237,15 +254,32 @@ func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) 
 		if idx >= len(row) {
 			continue
 		}
-		val := strings.ToLower(fmt.Sprintf("%v", row[idx]))
-		if len(f.Values) > 0 {
+		val := strings.TrimSpace(fmt.Sprintf("%v", row[idx]))
+		matched := false
+
+		if f.NotEmpty {
+			matched = val != "" && val != "<nil>"
+		} else if len(f.Values) > 0 {
+			valLower := strings.ToLower(val)
 			for _, v := range f.Values {
-				if val == strings.ToLower(fmt.Sprintf("%v", v)) {
-					filtered = append(filtered, row)
+				fv := strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", v)))
+				if valLower == fv {
+					matched = true
 					break
 				}
 			}
-		} else if val == strings.ToLower(fmt.Sprintf("%v", f.Value)) {
+		} else {
+			fv := strings.TrimSpace(strings.ToLower(fmt.Sprintf("%v", f.Value)))
+			if strings.ToLower(val) == fv {
+				matched = true
+			}
+		}
+
+		if f.Not {
+			matched = !matched
+		}
+
+		if matched {
 			filtered = append(filtered, row)
 		}
 	}
@@ -253,10 +287,17 @@ func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) 
 }
 
 func filterValues(f *config.FilterConfig) interface{} {
-	if len(f.Values) > 0 {
-		return f.Values
+	prefix := ""
+	if f.Not {
+		prefix = "not "
 	}
-	return f.Value
+	if f.NotEmpty {
+		return prefix + "not_empty"
+	}
+	if len(f.Values) > 0 {
+		return prefix + fmt.Sprintf("%v", f.Values)
+	}
+	return prefix + fmt.Sprintf("%v", f.Value)
 }
 
 func collectFilters(cfg *config.TableConfig) []config.FilterConfig {

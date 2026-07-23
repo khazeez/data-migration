@@ -1,19 +1,20 @@
 sheet:
-  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
-  worksheet: Group Endpoint
+  spreadsheet_id: 1wvjDFx2NKzHOhSbFxfBJol6n-RETHm700JNG7s5PppY
+  worksheet: Service
 
 table: client_gateways
 
+
 #column di database
 mapping:
-  Consumer Client:
+  Consumer Name:
     column: client_id
     transform: lookup
     lookup:
       table: clients
       from: name
       to: id
-  path:
+  Exposed Path:
     column: gateway_id
     transform: lookup
     lookup:
@@ -28,15 +29,22 @@ defaults:
   active: true
 
 #filter
-filter:
-  column: access
-  value: user
+filters:
+  - column: Access
+    value: user
+  - column: Consumer name
+    not_empty: true
+  - column: Endpoint Path
+    value: /table-call
+    not: true
+  - column: Is Deployed
+    values: [Deployed]
 
 
-#column db dengan value unik
-unique: []
+# #column db dengan value unik
+# unique: []
 
-#mencegah ada data yang duplicate di db
-on_conflict:
-  action: ignore
-  keys: [gateway_id]
+# #mencegah ada data yang duplicate di db
+# on_conflict:
+#   action: ignore
+#   keys: []
