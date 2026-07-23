@@ -3,6 +3,7 @@ package importer
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"data-migration/internal/config"
@@ -211,7 +212,7 @@ func newRowStats() *rowStats {
 func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) [][]interface{} {
 	idx := -1
 	for i, col := range columns {
-		if col == f.Column {
+		if strings.EqualFold(col, f.Column) {
 			idx = i
 			break
 		}
@@ -225,15 +226,15 @@ func filterRows(columns []string, rows [][]interface{}, f *config.FilterConfig) 
 		if idx >= len(row) {
 			continue
 		}
-		val := fmt.Sprintf("%v", row[idx])
+		val := strings.ToLower(fmt.Sprintf("%v", row[idx]))
 		if len(f.Values) > 0 {
 			for _, v := range f.Values {
-				if val == fmt.Sprintf("%v", v) {
+				if val == strings.ToLower(fmt.Sprintf("%v", v)) {
 					filtered = append(filtered, row)
 					break
 				}
 			}
-		} else if val == fmt.Sprintf("%v", f.Value) {
+		} else if val == strings.ToLower(fmt.Sprintf("%v", f.Value)) {
 			filtered = append(filtered, row)
 		}
 	}
