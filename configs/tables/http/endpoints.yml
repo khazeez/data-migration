@@ -1,5 +1,5 @@
 sheet:
-  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
+  spreadsheet_id: 1wvjDFx2NKzHOhSbFxfBJol6n-RETHm700JNG7s5PppY
   worksheet: HTTP
 
 table: endpoints
@@ -54,9 +54,11 @@ defaults:
   request_transformer_id: ""
   log_transformer_id: ""
 
-filter:
-  column: Is Deployed
+filters:
+- column: Is Deployed
   value: Deployed
+- column: type
+  value: HTTP
 
 unique: [path]
 
