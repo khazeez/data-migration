@@ -104,10 +104,21 @@ func (imp *Importer) Run(ctx context.Context) (*Result, error) {
 
 	if len(imp.tableCfg.Unique) > 0 {
 		before := len(rows)
-		rows = deduplicateRows(columns, rows, imp.tableCfg.Unique)
+		var dupKeys []string
+		rows, dupKeys = deduplicateRows(columns, rows, imp.tableCfg.Unique)
 		stats.deduped = before - len(rows)
 		if stats.deduped > 0 {
 			imp.log.Info("Deduplicated: %d unique rows (removed %d duplicates)", len(rows), stats.deduped)
+			if len(dupKeys) > 0 {
+				show := dupKeys
+				if len(show) > 10 {
+					show = dupKeys[:10]
+				}
+				imp.log.Info("  Duplicate values: %s", strings.Join(show, ", "))
+				if len(dupKeys) > 10 {
+					imp.log.Info("  ... and %d more", len(dupKeys)-10)
+				}
+			}
 		}
 	}
 
@@ -296,7 +307,7 @@ func (imp *Importer) filterExisting(ctx context.Context, tx db.Transaction, colu
 	return filtered, nil
 }
 
-func deduplicateRows(columns []string, rows [][]interface{}, keys []string) [][]interface{} {
+func deduplicateRows(columns []string, rows [][]interface{}, keys []string) (result [][]interface{}, dupKeys []string) {
 	keyIdx := make([]int, 0, len(keys))
 	for _, k := range keys {
 		for i, col := range columns {
@@ -308,11 +319,10 @@ func deduplicateRows(columns []string, rows [][]interface{}, keys []string) [][]
 	}
 
 	if len(keyIdx) != len(keys) {
-		return rows
+		return rows, nil
 	}
 
 	seen := make(map[string]bool)
-	var result [][]interface{}
 	for _, row := range rows {
 		var parts string
 		for _, idx := range keyIdx {
@@ -321,9 +331,11 @@ func deduplicateRows(columns []string, rows [][]interface{}, keys []string) [][]
 		if !seen[parts] {
 			seen[parts] = true
 			result = append(result, row)
+		} else {
+			dupKeys = append(dupKeys, strings.TrimSuffix(parts, "|"))
 		}
 	}
-	return result
+	return result, dupKeys
 }
 
 func hasLookup(mapping map[string]config.ColumnMap) bool {
