@@ -25,8 +25,13 @@ tasks:
     cmds:
       - go run ./cmd/ {{default "master-data" .CLI_ARGS}}
 
-  test:
+  dry-run:
     desc: Validate without inserting
+    cmds:
+      - go run ./cmd/ -dry-run {{default "master-data" .CLI_ARGS}}
+
+  test:
+    desc: Validate without inserting (alias: dry-run)
     cmds:
       - go run ./cmd/ -dry-run {{default "master-data" .CLI_ARGS}}
 
