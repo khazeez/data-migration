@@ -37,7 +37,7 @@ filters:
   - column: Endpoint Path
     value: /table-call
     not: true
-  - column: Is Deployed
+  - colum: Is Deployed
     values: [Deployed]
 
 

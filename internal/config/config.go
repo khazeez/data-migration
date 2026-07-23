@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -89,7 +90,7 @@ func LoadApp(path string) (*AppConfig, error) {
 	if path != "" {
 		data, err := os.ReadFile(path)
 		if err == nil {
-			if err := yaml.Unmarshal(data, &cfg); err != nil {
+			if err := parseYAMLStrict(data, &cfg); err != nil {
 				return nil, fmt.Errorf("parse app config: %w", err)
 			}
 		}
@@ -121,13 +122,19 @@ func applyEnvOverrides(cfg *AppConfig) {
 	}
 }
 
+func parseYAMLStrict(data []byte, out interface{}) error {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	return decoder.Decode(out)
+}
+
 func LoadTable(path string) (*TableConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read table config %s: %w", path, err)
 	}
 	var cfg TableConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := parseYAMLStrict(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse table config %s: %w", path, err)
 	}
 	if cfg.Sheet.Worksheet == "" {
@@ -142,7 +149,7 @@ func LoadJob(path string) (*JobConfig, error) {
 		return nil, fmt.Errorf("read job config %s: %w", path, err)
 	}
 	var cfg JobConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := parseYAMLStrict(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse job config %s: %w", path, err)
 	}
 	return &cfg, nil

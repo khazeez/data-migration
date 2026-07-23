@@ -4,17 +4,28 @@ Tool migrasi data dari Google Sheets ke PostgreSQL menggunakan Go. Dikonfigurasi
 
 ## Fitur
 
-- Integrasi Google Sheets API
-- Mapping kolom sheet ke kolom database (dengan rename)
-- Transform value: `string_to_bool`, `lower`, `upper`, `trim`
-- Filter baris berdasarkan nilai kolom tertentu
-- Default value otomatis: `uuid`, `now`, `null`, `true`/`false`
-- Batch insert dengan transaction dan rollback otomatis
-- Deduplikasi di level aplikasi (tanpa unique index di DB)
-- Conflict handling: `ignore` atau `upsert`
-- Dry-run mode untuk validasi
-- Semua konfigurasi via environment variable (tanpa file `app.yml`)
-- Taskfile dengan auto-load `.env`
+- **Integrasi Google Sheets API** — baca data dari spreadsheet
+- **Mapping kolom** — mapping sheet column → DB column dengan rename
+- **Transform value**: `string_to_bool`, `lower`, `upper`, `trim`
+- **Lookup transform** — lookup value dari tabel lain (contoh: nama → ID)
+- **Filter baris** — filter berdasarkan nilai kolom (case-insensitive)
+- **Multi-filter** — multiple filter conditions dengan AND logic
+- **Multi-value filter** — filter dengan multiple values (OR)
+- **Not filter** — exclude nilai tertentu (`not: true`)
+- **Not empty filter** — buang baris dengan kolom kosong (`not_empty: true`)
+- **Default value otomatis**: `uuid`, `now`, `null`, `true`/`false`
+- **Unique dedup** — hapus duplikat dari sheet data sebelum insert
+- **On-conflict DB dedup** — query existing rows di DB, skip duplikat (tanpa perlu unique index)
+- **Batch insert** dengan transaction dan rollback otomatis
+- **Meta-job** — job yang menjalankan sub-job berurutan
+- **Dry-run mode** — validasi tanpa insert
+- **Pipeline stats** — log detail per table: raw → filtered → transformed → deduped → existing → inserted
+- **Case-insensitive matching** — filter column name dan value
+- **Whitespace trimming** — trim spasi dari cell value dan filter value
+- **Cell overflow guard** — handle baris dengan lebih banyak cell dari header
+- **UUID handling** — handle `[16]uint8` dan `pgtype.UUID` dari pgx
+- **Semua konfigurasi via environment variable** — tanpa file `app.yml`
+- **Taskfile** dengan auto-load `.env`
 
 ## Prerequisites
 
@@ -30,12 +41,24 @@ Tool migrasi data dari Google Sheets ke PostgreSQL menggunakan Go. Dikonfigurasi
 ├── cmd/main.go                    # Entry point CLI
 ├── configs/
 │   ├── jobs/                      # Definisi job (daftar table)
+│   │   ├── _all.yml               # Master job (run-all)
+│   │   ├── consumer.yml
+│   │   ├── group-endpoint.yml
+│   │   ├── http.yml
+│   │   ├── javascript.yml
+│   │   ├── req-val.yml
+│   │   └── sql.yml
 │   └── tables/                    # Konfigurasi per-table
+│       ├── consumer/
+│       ├── group-endpoint/
+│       ├── http/
+│       ├── javascript/
+│       └── request-validation/
 ├── internal/
-│   ├── config/                    # Loader konfigurasi
+│   ├── config/                    # Loader konfigurasi & structs
 │   ├── db/                        # Koneksi PostgreSQL & batch insert
-│   ├── importer/                  # Orchestrator import
-│   ├── jobs/                      # Job runner
+│   ├── importer/                  # Orchestrator: filter → transform → lookup → insert
+│   ├── jobs/                      # Job runner (meta-job support)
 │   ├── logger/                    # Logger
 │   ├── mapper/                    # Index mapping kolom
 │   ├── sheets/                    # Google Sheets client
@@ -49,227 +72,201 @@ Tool migrasi data dari Google Sheets ke PostgreSQL menggunakan Go. Dikonfigurasi
 └── README.md
 ```
 
-## Setup
+## Quick Start
 
-### 1. Credentials Google Sheets
+### 1. Setup Credentials & Env
 
-Buat service account di Google Cloud Console, enable Google Sheets API, download `credentials.json`, dan letakkan di root project.
+Copy `.env.example` ke `.env`, isi koneksi PostgreSQL dan path credentials Google.
 
-### 2. Environment Variables
-
-Buat file `.env` di root project (lihat `.env.example`):
-
-```env
-# PostgreSQL
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=master
-DB_SSLMODE=disable
-
-# Google Sheets
-GOOGLE_CREDENTIALS=credentials.json
-
-# App
-JOBS_DIR=configs/jobs
-TABLES_DIR=configs/tables
-LOG_LEVEL=info
-```
-
-Atau bisa juga set via environment variable sistem langsung.
-
-### 3. Konfigurasi Table
-
-Buat file YAML di `configs/tables/`. Contoh: `customer.yml`
+### 2. Buat Table Config
 
 ```yaml
+# configs/tables/customer.yml
 sheet:
-  spreadsheet_id: 1ABCxyz...              # ID Google Sheet
-  worksheet: migrasi test                  # Nama worksheet/tab
+  spreadsheet_id: 1ABCxyz...
+  worksheet: Customer Data
 
-table: customer                            # Nama tabel di PostgreSQL
+table: customers
 
 mapping:
-  nama:                                    # Kolom di sheet
-    column: name                           # Kolom di database
-  umur:
-    column: age
-  script:
-    column: script
-  status:                                  # Kolom sheet "status"
-    column: active                         # Mapping ke kolom DB "active"
-    transform: string_to_bool              # Transform: "active"/"inactive" → true/false
-
-filter:                                    # Hanya insert baris tertentu
-  column: status                           # Kolom sheet (bukan kolom DB)
-  value: active                            # Hanya baris dengan value "active"
-
-defaults:
-  id: uuid                                 # Auto-generate UUID
-  timestamp: now                           # Timestamp current time
-
-on_conflict:                               # Conflict handling
-  action: ignore                           # ignore atau upsert
-  keys: [name]                             # Kolom untuk identifikasi duplicate
-```
-
-### 4. Konfigurasi Job
-
-Buat file YAML di `configs/jobs/`. Contoh: `master-data.yml`
-
-```yaml
-name: master-data                          # Nama job (gunakan di -job flag)
-description: Master data migration         # Deskripsi opsional
-tables:
-  - customer                               # Nama file table (tanpa .yml)
-```
-
-## Tutorial Lengkap
-
-### Step 1: Persiapan Environment
-
-1. Copy `.env.example` ke `.env` dan isi konfigurasi PostgreSQL serta path credentials.
-2. Pastikan `credentials.json` dari Google Cloud Console sudah ada di root project.
-3. Buat tabel tujuan di PostgreSQL. Contoh:
-
-```sql
-CREATE TABLE customer (
-    id UUID PRIMARY KEY,
-    name VARCHAR(255),
-    age INTEGER,
-    script TEXT,
-    active BOOLEAN DEFAULT true,
-    timestamp TIMESTAMPTZ DEFAULT NOW()
-);
-```
-
-### Step 2: Buat Table Config
-
-Buat file `configs/tables/customer.yml`:
-
-```yaml
-sheet:
-  spreadsheet_id: 11xTqz5xSSFT_9FzgoO3iwn0U-TcKaezTjm62cRq3WQI
-  worksheet: migrasi test
-
-table: customer
-
-mapping:
-  nama:
+  Nama:
     column: name
-  umur:
-    column: age
-  script:
-    column: script
-  status:
-    column: active
+  Status:
+    column: is_active
     transform: string_to_bool
-
-filter:
-  column: status
-  value: active
+  Group:
+    column: group_id
+    transform: lookup
+    lookup:
+      table: groups
+      from: name
+      to: id
 
 defaults:
   id: uuid
-  timestamp: now
+  created_at: now
+  active: true
+
+filter:
+  column: Status
+  value: active
+
+unique: [name]
 
 on_conflict:
   action: ignore
   keys: [name]
 ```
 
-Penjelasan:
-- **mapping**: Kolom `status` di sheet di-rename jadi `active` di DB, dan di-transform dari string ("active"/"inactive") ke boolean.
-- **filter**: Hanya baris dengan `status = "active"` yang akan di-insert. Baris dengan status lain akan difilter.
-- **defaults**: Kolom `id` diisi UUID otomatis, `timestamp` diisi waktu sekarang.
-- **on_conflict**: Jika ada duplikat berdasarkan `name`, skip (ignore).
-
-### Step 3: Buat Job Config
-
-Buat file `configs/jobs/master-data.yml`:
+### 3. Buat Job Config
 
 ```yaml
+# configs/jobs/master-data.yml
 name: master-data
-description: Migrasi master data customer
 tables:
   - customer
 ```
 
-### Step 4: Dry-Run
-
-Jalankan dry-run untuk validasi tanpa insert ke database:
+### 4. Jalankan
 
 ```bash
-go run ./cmd/ -job master-data -dry-run
+# Dry-run
+task dry-run -- master-data
+
+# Migrasi
+task run -- master-data
 ```
 
-atau via Taskfile:
+## Konfigurasi Table
 
-```bash
-task run -- -dry-run
+### Sheet Config
+
+```yaml
+sheet:
+  spreadsheet_id: 1ABCxyz...    # ID Google Sheet
+  worksheet: Sheet1             # Nama worksheet/tab
 ```
 
-Output akan menunjukkan:
-- Jumlah baris yang dibaca dari sheet
-- Jumlah baris yang difilter
-- Jumlah baris yang akan di-insert
-- Sample baris pertama
-- Konfigurasi filter dan conflict
+### Mapping
 
-### Step 5: Jalankan Migrasi
-
-```bash
-go run ./cmd/ -job master-data
-```
-
-atau via Taskfile:
-
-```bash
-task run
-```
-
-## Transform Values
-
-Transform diterapkan pada value kolom setelah dibaca dari sheet, sebelum di-insert ke database.
-
-| Transform | Input Contoh               | Output  |
-|-----------|----------------------------|---------|
-| `string_to_bool` | "Y", "yes", "1", "true", "t", "active", "deployed" | `true` |
-| `string_to_bool` | "N", "no", "0", "false", "f", "inactive", "undeployed" | `false` |
-| `lower`   | "Hello World"              | "hello world" |
-| `upper`   | "Hello World"              | "HELLO WORLD" |
-| `trim`    | "  value  "               | "value" |
-
-Contoh mapping dengan transform:
+Mapping sheet column ke DB column:
 
 ```yaml
 mapping:
-  status:
+  Nama Lengkap:        # Kolom di sheet
+    column: name       # Kolom di database
+    required: true     # (optional) Wajib ada di sheet
+  Status:
     column: is_active
-    transform: string_to_bool
-  nama:
-    column: name_lower
-    transform: lower
+    transform: string_to_bool   # Transform value
 ```
 
-## Filter
+### Transform Values
 
-Filter bekerja pada **sheet column names** (sebelum transform/mapping), jadi nilai yang dibandingkan adalah nilai mentah dari sheet.
+| Transform | Input Contoh | Output |
+|-----------|-------------|--------|
+| `string_to_bool` | "Y", "yes", "1", "true", "t", "active", "deployed" | `true` |
+| `string_to_bool` | "N", "no", "0", "false", "f", "inactive", "undeployed" | `false` |
+| `lower` | "Hello World" | "hello world" |
+| `upper` | "Hello World" | "HELLO WORLD" |
+| `trim` | " value " | "value" |
+| `lookup` | (lihat lookup section) | |
+
+### Lookup Transform
+
+Mengganti value sheet dengan ID dari tabel referensi di database:
+
+```yaml
+mapping:
+  Nama Group:
+    column: group_id
+    transform: lookup
+    lookup:
+      table: groups         # Tabel referensi
+      from: name            # Kolom pencarian (sheet value dicocokkan dengan ini)
+      to: id                # Kolom hasil (nilai dari sini yang akan dipakai)
+```
+
+Flow: sheet value `"Admin"` → query `SELECT id FROM groups WHERE name = 'Admin'` → hasil `"uuid-admin"` dipakai sebagai `group_id`.
+
+### Default Values
+
+```yaml
+defaults:
+  id: uuid                  # Generate UUID v4
+  created_at: now           # Timestamp current time (RFC3339)
+  updated_at: now
+  active: true              # Boolean true
+  deleted_at: null          # Nilai null
+  counter: 0                # Angka 0
+```
+
+### Filter
+
+Filter menjalankan pada **data mentah dari sheet** (sebelum transform/mapping). Column name dan value dicocokkan secara **case-insensitive**.
+
+#### Single filter
 
 ```yaml
 filter:
-  column: status        # Nama kolom di sheet
-  value: active         # Value yang dicocokkan (string)
+  column: Status
+  value: active           # Hanya baris dengan Status = "active"
 ```
 
-Hanya baris dengan nilai sesuai `value` yang akan diproses lebih lanjut.
+#### Multiple values (OR)
 
-## Conflict Handling
+```yaml
+filter:
+  column: type
+  values: [oauth2, apikey]    # Hanya baris dengan type = oauth2 ATAU apikey
+```
 
-Dua mode conflict handling:
+#### Not empty
 
-### ignore (default)
+```yaml
+filter:
+  column: Email
+  not_empty: true       # Hanya baris yang kolom Email tidak kosong
+```
+
+#### Not / exclude
+
+```yaml
+filter:
+  column: Status
+  value: pending
+  not: true             # Hanya baris dengan Status != "pending"
+```
+
+#### Multiple filters (AND)
+
+```yaml
+filters:
+  - column: type
+    values: [oauth2, apikey]
+  - column: Email
+    not_empty: true
+  - column: Status
+    value: pending
+    not: true
+```
+
+Semua kondisi harus terpenuhi (AND). Nilai dalam `values` bersifat OR.
+
+### Unique Dedup (Sheet Level)
+
+Hapus baris duplikat dari data sheet berdasarkan kolom tertentu. Hanya baris pertama yang di-keep:
+
+```yaml
+unique: [name]           # Hapus duplikat berdasarkan kolom name
+unique: [name, email]    # Kombinasi name + email
+```
+
+### On Conflict (DB Level)
+
+Dedup dengan mengecek data yang sudah ada di database.
+
+#### Ignore (app-level)
 
 ```yaml
 on_conflict:
@@ -277,17 +274,22 @@ on_conflict:
   keys: [name]
 ```
 
-Aplikasi akan query data existing terlebih dahulu, lalu skip baris yang sudah ada. Tidak memerlukan unique index di PostgreSQL.
+Aplikasi akan query `SELECT DISTINCT name FROM table WHERE name IN (...)` lalu skip baris yang sudah ada. Tidak memerlukan unique index di PostgreSQL.
 
-### upsert
+### Meta-Job
+
+Job yang menjalankan sub-job berurutan:
 
 ```yaml
-on_conflict:
-  action: upsert
-  keys: [name]
+# configs/jobs/_all.yml
+name: all
+jobs:
+  - consumer
+  - req-val
+  - javascript
+  - http
+  - group-endpoint
 ```
-
-Menggunakan `ON CONFLICT ... DO UPDATE` di PostgreSQL. **Membutuhkan unique index** di tabel.
 
 ## CLI Flags
 
@@ -295,24 +297,37 @@ Menggunakan `ON CONFLICT ... DO UPDATE` di PostgreSQL. **Membutuhkan unique inde
 |------|---------|-------------|
 | `-job` | (required) | Nama job dari `configs/jobs/` |
 | `-dry-run` | `false` | Validasi tanpa insert |
+| `-all` | `false` | Jalankan job `_all` (meta-job) |
 | `-batch` | `500` | Ukuran batch insert |
 | `-log-level` | `info` | Level log: `debug`, `info`, `warn`, `error` |
+| `-list` | `false` | List available jobs |
+| `-config` | `""` | Path ke app config (optional) |
+
+Job name bisa via `-job` flag atau positional arg:
+
+```bash
+go run ./cmd/ -job consumer
+go run ./cmd/ consumer           # positional
+go run ./cmd/ -all               # run _all job
+```
 
 ## Taskfile Commands
 
 ```bash
-task run          # Jalankan migrasi (default job: master-data)
-task dry-run      # Dry-run mode
-task list         # List available jobs
-task build        # Build binary
+task run -- <job>         # Jalankan migrasi
+task dry-run -- <job>     # Dry-run mode
+task run-all              # Jalankan semua job (via _all)
+task list                 # List available jobs
+task build                # Build binary
+task clean                # Hapus binary
 ```
 
-Gunakan `--` untuk oper ke flag tambahan:
+Gunakan `--` untuk oper argumen:
 
 ```bash
-task run -- -job master-data -batch 200 -log-level debug
-task dry-run -- -job master-data
-task list
+task run -- consumer
+task dry-run -- consumer
+task run -- consumer -log-level debug -batch 200
 ```
 
 ## Environment Variables
@@ -324,22 +339,81 @@ task list
 | `DB_USER` | ✓ | - | User PostgreSQL |
 | `DB_PASSWORD` | ✓ | - | Password PostgreSQL |
 | `DB_NAME` | ✓ | - | Nama database |
-| `DB_SSLMODE` | - | `disable` | SSL mode |
-| `GOOGLE_CREDENTIALS` | ✓ | - | Path ke credentials.json |
+| `GOOGLE_CREDENTIAL` | ✓ | - | Path ke credentials.json |
 | `JOBS_DIR` | - | `configs/jobs` | Directory job config |
 | `TABLES_DIR` | - | `configs/tables` | Directory table config |
-| `LOG_LEVEL` | - | `info` | Level log |
 
-Semua environment variable otomatis di-load dari file `.env` oleh Taskfile.
+Semua env variable otomatis di-load dari file `.env` oleh Taskfile.
 
 ## Alur Migrasi
+
+Setiap table diproses dengan pipeline:
+
+```
+Raw Sheet → Filter → Transform + Lookup → Unique Dedup → DB Dedup → Batch Insert
+```
+
+Detailed flow:
 
 1. Baca konfigurasi table dari YAML
 2. Baca data dari Google Sheets API
 3. Validasi header sheet vs mapping
-4. **Filter** baris berdasarkan kondisi filter
-5. **Transform** value (rename kolom, string_to_bool, dll)
-6. Apply **default values** untuk kolom yang tidak ada di sheet
-7. **Deduplikasi** (jika on_conflict = ignore): query existing data, skip duplikat
-8. **Batch insert** dalam transaction
-9. Commit atau rollback jika error
+4. **Filter** — buang baris yang tidak sesuai kondisi filter (case-insensitive, trim whitespace)
+5. **Transform** — mapping kolom, transform value (string_to_bool, lower, dll), default values
+6. **Lookup** — resolve lookup values dari database (batch query)
+7. **Unique dedup** — hapus baris duplikat dari data sheet berdasarkan `unique` key
+8. **DB dedup** (on_conflict ignore) — query existing rows, skip duplikat
+9. **Batch insert** — insert dalam batch dengan transaction
+10. Commit atau rollback jika error
+
+Pipeline stats di-log setiap selesai satu table:
+
+```
+✓ Table credentials: 25 rows inserted | Pipeline: 30 raw → 2 filtered → 28 transformed → 1 deduped → 3 existing → 25 inserted (4.2s)
+```
+
+## Contoh Config Lengkap
+
+```yaml
+sheet:
+  spreadsheet_id: 1ABCxyz...
+  worksheet: Endpoint
+
+table: endpoints
+
+mapping:
+  Connection:
+    column: backend_id
+    transform: lookup
+    lookup:
+      table: backends
+      from: name
+      to: id
+  Path:
+    column: path
+  Method:
+    column: method
+  Type:
+    column: type
+
+defaults:
+  id: uuid
+  created_at: now
+  updated_at: now
+  active: true
+
+filters:
+  - column: type
+    values: [http, grpc]
+  - column: path
+    not_empty: true
+  - column: Status
+    value: deleted
+    not: true
+
+unique: [path]
+
+on_conflict:
+  action: ignore
+  keys: [path]
+```
