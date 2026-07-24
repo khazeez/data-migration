@@ -18,7 +18,7 @@ mapping:
     column: method
   Access:
     column: type
-  Allowed Headers:
+  Allowed Header:
     column: allowed_headers
   Interceptor:
     column: request_validator_id

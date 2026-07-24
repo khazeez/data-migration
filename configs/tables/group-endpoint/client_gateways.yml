@@ -34,9 +34,6 @@ filters:
     value: user
   - column: Consumer name
     not_empty: true
-  - column: Endpoint Path
-    value: /table-call
-    not: true
   - column: Is Deployed
     values: [Deployed]
 
